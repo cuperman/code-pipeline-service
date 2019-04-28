@@ -1,4 +1,6 @@
 import { Stack, Construct, StackProps } from '@aws-cdk/cdk';
+import { PolicyStatement } from '@aws-cdk/aws-iam';
+import { Bucket } from '@aws-cdk/aws-s3';
 import { EventRule } from '@aws-cdk/aws-events';
 import { Function, Runtime, Code, CfnPermission } from '@aws-cdk/aws-lambda';
 
@@ -6,35 +8,45 @@ function repositoryArn(region: string, account: string, repository: string): str
   return `arn:aws:codecommit:${region}:${account}:${repository}`;
 }
 
-interface IMyConstructProps {
-  readonly account: string;
-  readonly region: string;
-  readonly repository: string;
-  readonly event: string;
-  readonly referenceType: string;
-  readonly functionArn: string;
+interface ICommitActionProps {
+  readonly repoAccount: string;
+  readonly repoRegion: string;
+  readonly repoName: string;
+  readonly commitEvent: 'referenceCreated' | 'referenceUpdated' | 'referenceDeleted';
+  readonly commitRefType: 'branch' | 'tag';
+  readonly invokeFunctionArn: string;
 }
 
-class TriggerFunctionOnCodeCommitEvent extends Construct {
+/*
+ * Invokes a lambda function on a commit event
+ */
+class CommitAction extends Construct {
   public eventRule: EventRule;
   public permission: CfnPermission;
 
-  constructor(scope: Construct, id: string, props: IMyConstructProps) {
+  constructor(scope: Construct, id: string, props: ICommitActionProps) {
     super(scope, id);
 
-    const { account, region, repository, event, referenceType, functionArn } = props;
+    const {
+      repoAccount,
+      repoRegion,
+      repoName,
+      commitEvent,
+      commitRefType,
+      invokeFunctionArn
+    } = props;
 
     this.eventRule = new EventRule(scope, `${id}-EventRule`, {
       eventPattern: {
-        account: [account],
-        region: [region],
+        account: [repoAccount],
+        region: [repoRegion],
         source: ['aws.codecommit'],
-        resources: [repositoryArn(region, account, repository)],
+        resources: [repositoryArn(repoRegion, repoAccount, repoName)],
         detailType: ['CodeCommit Repository State Change'],
         detail: {
-          event: [event],
-          repositoryName: [repository],
-          referenceType: [referenceType]
+          event: [commitEvent],
+          repositoryName: [repoName],
+          referenceType: [commitRefType]
         }
       },
       targets: [
@@ -42,7 +54,7 @@ class TriggerFunctionOnCodeCommitEvent extends Construct {
           asEventRuleTarget: () => {
             return {
               id: `${id}-TargetFunction`,
-              arn: functionArn
+              arn: invokeFunctionArn
             };
           }
         }
@@ -51,7 +63,7 @@ class TriggerFunctionOnCodeCommitEvent extends Construct {
 
     new CfnPermission(scope, `${id}-Permission`, {
       action: 'lambda:InvokeFunction',
-      functionName: functionArn,
+      functionName: invokeFunctionArn,
       principal: 'events.amazonaws.com',
       sourceArn: this.eventRule.ruleArn
     });
@@ -65,12 +77,10 @@ interface CicdStackProps extends StackProps {
 }
 
 export class CicdStack extends Stack {
+  public readonly artifactBucket: Bucket;
   public readonly createPipeline: Function;
-  public readonly triggerPipeline: Function;
   public readonly destroyPipeline: Function;
-
   public readonly onRefCreate: EventRule;
-  public readonly onRefUpdate: EventRule;
   public readonly onRefDelete: EventRule;
 
   constructor(scope: Construct, id: string, props: CicdStackProps) {
@@ -81,49 +91,49 @@ export class CicdStack extends Stack {
     const runtime = Runtime.NodeJS810;
     const code = Code.asset('./backend');
 
+    this.artifactBucket = new Bucket(this, 'ArtifactBucket', {
+      versioned: true
+    });
+
     this.createPipeline = new Function(this, 'CreatePipeline', {
       runtime,
       code,
-      handler: 'pipeline.create'
-    });
-
-    this.triggerPipeline = new Function(this, 'TriggerPipeline', {
-      runtime,
-      code,
-      handler: 'pipeline.trigger'
+      handler: 'pipeline.createPipelineFromCodeCommitEvent',
+      environment: {
+        ARTIFACT_BUCKET_NAME: this.artifactBucket.bucketName
+      },
+      timeout: 300
     });
 
     this.destroyPipeline = new Function(this, 'DestroyPipeline', {
       runtime,
       code,
-      handler: 'pipeline.destroy'
+      handler: 'pipeline.destroyPipelineFromCodeCommitEvent',
+      timeout: 60
     });
 
-    new TriggerFunctionOnCodeCommitEvent(this, 'CreatePipelineOnBranchCreate', {
-      account,
-      region,
-      repository,
-      event: 'referenceCreated',
-      referenceType: 'branch',
-      functionArn: this.createPipeline.functionArn
+    const permissionToManagePipelines = new PolicyStatement()
+      .addAllResources()
+      .addActions('cloudformation:*', 'iam:*', 'events:*', 'codebuild:*', 'codepipeline:*');
+    this.createPipeline.addToRolePolicy(permissionToManagePipelines);
+    this.destroyPipeline.addToRolePolicy(permissionToManagePipelines);
+
+    new CommitAction(this, 'CreatePipelineOnBranchCreate', {
+      repoAccount: account,
+      repoRegion: region,
+      repoName: repository,
+      commitEvent: 'referenceCreated',
+      commitRefType: 'branch',
+      invokeFunctionArn: this.createPipeline.functionArn
     });
 
-    new TriggerFunctionOnCodeCommitEvent(this, 'TriggerPipelineOnBranchUpdate', {
-      account,
-      region,
-      repository,
-      event: 'referenceUpdated',
-      referenceType: 'branch',
-      functionArn: this.triggerPipeline.functionArn
-    });
-
-    new TriggerFunctionOnCodeCommitEvent(this, 'DestroyPipelineOnBranchDelete', {
-      account,
-      region,
-      repository,
-      event: 'referenceDeleted',
-      referenceType: 'branch',
-      functionArn: this.destroyPipeline.functionArn
+    new CommitAction(this, 'DestroyPipelineOnBranchDelete', {
+      repoAccount: account,
+      repoRegion: region,
+      repoName: repository,
+      commitEvent: 'referenceDeleted',
+      commitRefType: 'branch',
+      invokeFunctionArn: this.destroyPipeline.functionArn
     });
   }
 }

@@ -5,12 +5,15 @@
     "cicd": "bin/cicd.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build:templates": "cdk synth --app ./bin/pipeline.js > ./backend/pipeline.yml",
+    "build:typescript": "tsc",
+    "build": "npm run build:typescript && npm run build:templates",
     "watch": "tsc -w",
     "cdk": "cdk"
   },
   "devDependencies": {
     "@types/node": "8.10.45",
+    "@types/uuid": "^3.4.4",
     "typescript": "^3.3.3333",
     "aws-cdk": "^0.29.0"
   },
@@ -20,8 +23,11 @@
     "@aws-cdk/aws-codepipeline": "^0.29.0",
     "@aws-cdk/aws-codepipeline-actions": "^0.29.0",
     "@aws-cdk/aws-events": "^0.29.0",
+    "@aws-cdk/aws-iam": "^0.29.0",
     "@aws-cdk/aws-lambda": "^0.29.0",
     "@aws-cdk/cdk": "^0.29.0",
-    "source-map-support": "^0.5.9"
+    "aws-sdk": "^2.444.0",
+    "source-map-support": "^0.5.9",
+    "uuid": "^3.3.2"
   }
 }

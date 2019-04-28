@@ -10,20 +10,6 @@ Automatically create code pipelines for every branch in a list of repositories. 
  * `cdk diff`        compare deployed stack with current state
  * `cdk synth`       emits the synthesized CloudFormation template
 
-## Build & Deploy
-
-```bash
-npm run build
-
-cdk synth --app ./bin/cicd.js
-cdk diff --app ./bin/cicd.js
-cdk deploy --app ./bin/cicd.js
-
-cdk synth --app ./bin/pipeline.js
-cdk diff --app ./bin/pipeline.js
-cdk deploy --app ./bin/pipeline.js
-```
-
 ## Strategy
 
 * On Project Add => Create Repo Ref Listener

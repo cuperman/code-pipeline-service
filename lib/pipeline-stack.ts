@@ -1,4 +1,4 @@
-import { Stack, Construct, StackProps } from '@aws-cdk/cdk';
+import { Stack, Construct, StackProps, CfnParameter } from '@aws-cdk/cdk';
 import { Bucket, IBucket } from '@aws-cdk/aws-s3';
 import { Repository, IRepository } from '@aws-cdk/aws-codecommit';
 import {
@@ -11,13 +11,10 @@ import {
 import { Pipeline, IStage, Artifact } from '@aws-cdk/aws-codepipeline';
 import { CodeCommitSourceAction, CodeBuildAction } from '@aws-cdk/aws-codepipeline-actions';
 
-interface PipelineStackProps extends StackProps {
-  readonly artifactBucketName: string;
-  readonly repositoryName: string;
-  readonly branchName: string;
-}
-
 export class PipelineStack extends Stack {
+  public artifactBucketName: CfnParameter;
+  public repositoryName: CfnParameter;
+  public branchName: CfnParameter;
   public artifactBucket: IBucket;
   public repository: IRepository;
   public project: Project;
@@ -27,17 +24,27 @@ export class PipelineStack extends Stack {
   public buildStage: IStage;
   public buildOutput: Artifact;
 
-  constructor(scope: Construct, id: string, props: PipelineStackProps) {
+  constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const { artifactBucketName, repositoryName, branchName } = props;
+    this.artifactBucketName = new CfnParameter(this, 'ArtifactBucketName', {
+      type: 'String'
+    });
+
+    this.repositoryName = new CfnParameter(this, 'RepositoryName', {
+      type: 'String'
+    });
+
+    this.branchName = new CfnParameter(this, 'BranchName', {
+      type: 'String'
+    });
 
     this.artifactBucket = Bucket.import(this, 'ArtifactBucket', {
-      bucketName: artifactBucketName
+      bucketName: this.artifactBucketName.stringValue
     });
 
     this.repository = Repository.import(this, 'Repository', {
-      repositoryName
+      repositoryName: this.repositoryName.stringValue
     });
 
     this.project = new Project(this, 'Project', {
@@ -65,7 +72,7 @@ export class PipelineStack extends Stack {
       new CodeCommitSourceAction({
         actionName: 'FetchSource',
         repository: this.repository,
-        branch: branchName,
+        branch: this.branchName.stringValue,
         output: this.sourceOutput
       })
     );
