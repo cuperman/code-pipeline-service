@@ -71,7 +71,7 @@ class CommitAction extends Construct {
 }
 
 interface CicdStackProps extends StackProps {
-  readonly account: string;
+  readonly account?: string;
   readonly region: string;
   readonly repository: string;
 }
@@ -86,7 +86,8 @@ export class CicdStack extends Stack {
   constructor(scope: Construct, id: string, props: CicdStackProps) {
     super(scope, id, props);
 
-    const { account, region, repository } = props;
+    const { region, repository } = props;
+    const account = props.account || this.accountId;
 
     const runtime = Runtime.NodeJS810;
     const code = Code.asset('./backend');
