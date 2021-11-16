@@ -26,7 +26,7 @@
     "@aws-cdk/aws-iam": "^0.29.0",
     "@aws-cdk/aws-lambda": "^0.29.0",
     "@aws-cdk/cdk": "^0.29.0",
-    "aws-sdk": "^2.444.0",
+    "aws-sdk": "^2.814.0",
     "source-map-support": "^0.5.9",
     "uuid": "^3.3.2"
   }
